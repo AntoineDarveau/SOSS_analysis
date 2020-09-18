@@ -1,4 +1,5 @@
 import numpy as np
+from astropy.io import fits
 from extract.custom_numpy import is_sorted
 
 
@@ -86,3 +87,25 @@ def add_noise(data, bkgrd=20):
     data_noisy = data_noisy + data_bkgrd
 
     return data_noisy
+
+def load_simu(filename, order=None, noisy=True):
+    
+    hdu = fits.open(filename)
+    out = {'grid': hdu['FLUX'].data['lam_grid'],
+           'f_k': hdu['FLUX'].data['f_lam'],
+           'grid_c1': hdu['FLUX_C1'].data['lam_grid'],
+           'f_c1': hdu['FLUX_C1'].data['f_lam'],
+           'grid_c2': hdu['FLUX_C2'].data['lam_grid'],
+           'f_c2': hdu['FLUX_C2'].data['f_lam']}
+    
+    if order is None:
+        key = "FULL"
+    else:
+        key = f"ORD {order}"
+        
+    if noisy:
+        key += " NOISY"
+        
+    out['data'] = hdu[key].data
+    
+    return out
