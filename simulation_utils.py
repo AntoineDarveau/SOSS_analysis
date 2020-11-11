@@ -109,3 +109,53 @@ def load_simu(filename, order=None, noisy=True):
     out['data'] = hdu[key].data
     
     return out
+
+############################
+
+from extract.convolution import fwhm2sigma, gaussians, get_c_matrix
+
+LIGHT_SPEED = 2.9979246e8  # m / s
+
+class KerVsini:
+    
+    def __init__(self, vsini, wv_grid, n_os=2):
+        """
+        vsini: m/s
+        """
+    
+        # Determine the resolution based on the sampling
+        d_grid = np.diff(wv_grid)
+        res = wv_grid[:-1]/ d_grid / n_os
+        
+        # Get fwhm given the vsini
+        fwhm = res * vsini / LIGHT_SPEED * wv_grid[:-1]
+        
+        # What we really want is sigma, not FWHM
+        sig = fwhm2sigma(fwhm)
+        
+        # interpolate fwhm as a function of wavelength
+        fct_sig = interp1d(wv_grid[:-1], sig, bounds_error=False,
+                            fill_value='extrapolate')
+        
+        self.fct_sig = fct_sig
+        
+    def __call__(self, x, x0):
+        """
+        Parameters
+        ----------
+        x: 1d array
+            position where the kernel is evaluated
+        x0: 1d array (same shape as x)
+            position of the kernel center for each x.
+
+        Returns
+        -------
+        Value of the gaussian kernel for each sets of (x, x0)
+        """
+
+        # Get the sigma of each gaussians
+        sig = self.fct_sig(x0)
+
+        return gaussians(x, x0, sig)
+        
+

@@ -1,6 +1,6 @@
 import numpy as np
 
-from utils import get_lam_p_or_m, grid_from_map
+from extract.utils import get_lam_p_or_m, grid_from_map
 
 
 class OptimalExtract:
@@ -11,6 +11,8 @@ class OptimalExtract:
         # Use `lam_grid` at the center of the trace if not specified
         if lam_grid is None:
             lam_grid, lam_col = grid_from_map(lam_ord, p_ord, out_col=True)
+        else:
+            lam_col = slice(None)
 
         # Save wavelength grid
         self.lam_grid = lam_grid.copy()
