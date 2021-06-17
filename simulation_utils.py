@@ -1,7 +1,51 @@
 import numpy as np
+from scipy.interpolate import interp1d
 from astropy.io import fits
 from extract.custom_numpy import is_sorted
 
+class GaussKer:
+
+    def __init__(self, grid, res, bounds_error=False,
+                 fill_value="extrapolate", **kwargs):
+        """
+        Parameters
+        ----------
+        grid : 1d array
+            Grid used to define the kernels
+        fwhm: ...
+            ...
+        bounds_error, fill_value and kwargs:
+            `interp1d` kwargs used to get FWHM as a function of the grid.
+        """
+        fwhm = grid / res
+        
+        # What we really want is sigma, not FWHM
+        sig = fwhm2sigma(fwhm)
+
+        # Now put sigma as a function of the grid
+        sig = interp1d(grid, sig, bounds_error=bounds_error,
+                       fill_value=fill_value, **kwargs)
+
+        self.fct_sig = sig
+
+    def __call__(self, x, x0):
+        """
+        Parameters
+        ----------
+        x: 1d array
+            position where the kernel is evaluated
+        x0: 1d array (same shape as x)
+            position of the kernel center for each x.
+
+        Returns
+        -------
+        Value of the gaussian kernel for each sets of (x, x0)
+        """
+
+        # Get the sigma of each gaussians
+        sig = self.fct_sig(x0)
+
+        return gaussians(x, x0, sig)
 
 def gaussian(x, x0=0, sig=1, amp=None):
     

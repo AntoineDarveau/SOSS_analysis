@@ -3,6 +3,142 @@ import numpy as np
 from extract.utils import get_lam_p_or_m, grid_from_map
 
 
+def get_trace_center(aperture):
+    """
+    *** To use when the trace centroid is not available ***
+    Return the center of the trace given an aperture estimate.
+    The aperture estimate could use the data directly.
+    Parameter
+    ---------
+    aperture: 2d array
+        estimate of the aperture.
+    Output
+    ------
+    (columns, aperture center)
+    """
+    # Valid columns
+    col = np.where((aperture > 0.).any(axis=0))[0]
+    
+    # Get rows position for valid columns
+    rows = np.indices(aperture.shape)[0][:, col]
+    
+    # Convert aperture to weights for valid columns
+    weights = aperture[:, col]
+    weights /= weights.sum(axis=0)
+    
+    # Compute center of mass to find the center
+    center = (rows*weights).sum(axis=0)
+    
+    return col, center
+
+def get_box_weights(cols, centroid, n_pix, shape):
+    """
+    Return the weights of a box aperture given the centroid
+    and the width of the box in pixels.
+    All pixels will have the same weights except at the
+    ends of the box aperture.
+    Parameters
+    ----------
+    cols: 1d array, integer
+        Columns index positions. Useful if the centroid is defined for 
+        specific columns or a subrange of columns.
+    centroid: 1d array
+        Position of the centroid (in rows). Same shape as `cols`
+    n_pix: float
+        full width of the extraction box in pixels.
+    shape: 2 integers tuple
+        shape of the output image. (n_row, n_column)
+    Ouput
+    -----
+    2d image of the box weights
+    """
+    # Row centers of all pixels
+    rows = np.indices((shape[0], len(cols)))[0]
+    
+    # Pixels that are entierly inside the box are set to one
+    cond = (rows <= (centroid - 0.5 + n_pix/2))
+    cond &= ((centroid + 0.5 - n_pix/2) <= rows)
+    weights = cond.astype(float)
+    
+    # Upper bound
+    cond = (centroid - 0.5 + n_pix/2) < rows
+    cond &= (rows < (centroid + 0.5 + n_pix/2))
+    weights[cond] = (centroid + n_pix/2 - (rows - 0.5))[cond]
+    
+    # Lower bound
+    cond = (rows < (centroid + 0.5 - n_pix/2))
+    cond &= ((centroid - 0.5 - n_pix/2) < rows)
+    weights[cond] = (rows + 0.5 - (centroid - n_pix/2))[cond]
+    
+    # Return with the specified shape
+    # with zeros where the box is not define
+    out = np.zeros(shape, dtype=float)
+    out[:, cols] = weights
+    
+    return out
+
+
+def box_extract(data, box_weights, lam_col=None, cols=None, mask=None):
+    '''
+    Make a box extraction
+    Parameters
+    ----------
+    data: 2d array of shape (n_row, n_columns)
+        scidata
+    box_weights: 2d array, same shape as data
+        pre-computed weights for box extraction.
+    lam_col: 1d array of shape (n_columns)
+        wavelength associated with each columns. If not given,
+        the column position is taken as ordinates.
+    cols: numpy valid index
+        Which columns to extract
+    mask: 2d array, boolean, same shape as data
+        masked pixels
+    Output
+    ------
+    (wavelengths or column position, spectrum)
+    '''
+    # Use all columns if not specified
+    if cols is None:
+        cols = slice(None)
+
+    # Define mask if not given
+    if mask is None:
+        # False everywhere
+        mask = np.zeros(data.shape, dtype=bool)
+
+    # Use pixel position if no wavelenghts are given
+    if lam_col is None:
+        lam_col = np.arange(data.shape[1])
+
+    # Make a copy of arrays with only needed columns
+    # so it is not modified outside of the function
+    data = data[:, cols].copy()
+    box_weights = box_weights[:, cols].copy()
+    mask = mask[:, cols].copy()
+
+    # Initialize the output with nans
+    out = np.ones_like(lam_col) * np.nan
+
+    # Mask potential nans in data
+    mask_nan = np.isnan(data)
+
+    # Combine with user specified mask
+    mask = (mask_nan | mask)
+
+    # Apply to weights
+    box_weights[mask_nan] = np.nan
+
+    # Normalize only valid columns
+    out = np.nansum(box_weights*data, axis=0)    
+    
+    # Return sorted with the associated wavelength
+    idx_sort = np.argsort(lam_col)
+    out = (lam_col[idx_sort], out[idx_sort])
+
+    return out
+
+
 class OptimalExtract:
 
     def __init__(self, scidata, t_ord, p_ord, lam_ord, lam_grid=None,
